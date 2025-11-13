@@ -4,7 +4,6 @@ import java.io.*;
 import java.nio.file.*;
 import java.security.*;
 import java.security.spec.*;
-import java.util.Base64;
 
 public class Encriptador {
 
@@ -51,29 +50,58 @@ public class Encriptador {
         return cipher.doFinal(claveCifrada);
     }
 
-    public static String publicKeyToBase64(PublicKey clave) {
-        return Base64.getEncoder().encodeToString(clave.getEncoded());
+    // --- HEX helpers ---
+    public static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
-    public static PublicKey publicKeyFromBase64(String b64) throws Exception {
-        byte[] bytes = Base64.getDecoder().decode(b64);
+    public static byte[] hexToBytes(String hex) {
+        if (hex == null || hex.length() == 0) return new byte[0];
+        int len = hex.length();
+        if (len % 2 != 0) throw new IllegalArgumentException("Hex string must have even length");
+        byte[] out = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            out[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return out;
+    }
+
+    // Convert public key <-> hex (instead of Base64)
+    public static String publicKeyToHex(PublicKey clave) {
+        return bytesToHex(clave.getEncoded());
+    }
+
+    public static PublicKey publicKeyFromHex(String hex) throws Exception {
+        byte[] bytes = hexToBytes(hex);
         X509EncodedKeySpec spec = new X509EncodedKeySpec(bytes);
         return KeyFactory.getInstance("RSA").generatePublic(spec);
     }
 
-    public static void guardarClavePublicaEnArchivo(String nombre, String pubB64) {
+    // sanitize filenames for Windows (replace ':' -> '_')
+    private static String sanitizeFilename(String nombre) {
+        return nombre.replace(':', '_');
+    }
+
+    public static void guardarClavePublicaEnArchivo(String nombre, String pubHex) {
         try {
             Path dir = Paths.get("keys");
             if (!Files.exists(dir)) Files.createDirectories(dir);
-            Files.writeString(dir.resolve(nombre + ".pub"), pubB64);
+            String safe = sanitizeFilename(nombre);
+            Files.writeString(dir.resolve(safe + ".pub"), pubHex);
         } catch (IOException e) {
             System.err.println("Error guardando clave pública: " + e.getMessage());
         }
     }
 
-    public static String leerClavePublicaDesdeArchivoComoBase64(String nombre) {
+    public static String leerClavePublicaDesdeArchivoComoHex(String nombre) {
         try {
-            Path path = Paths.get("keys", nombre + ".pub");
+            String safe = sanitizeFilename(nombre);
+            Path path = Paths.get("keys", safe + ".pub");
             if (Files.exists(path)) return Files.readString(path).trim();
         } catch (IOException ignored) {}
         return null;
