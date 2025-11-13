@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.Base64;
 
 public class PCNodeB {
     private String ip;
@@ -31,8 +30,8 @@ public class PCNodeB {
         this.miClavePublica = kp.getPublic();
         this.miClavePrivada = kp.getPrivate();
 
-        String miPubB64 = Encriptador.publicKeyToBase64(miClavePublica);
-        Encriptador.guardarClavePublicaEnArchivo(this.nombre, miPubB64);
+        String miPubHex = Encriptador.publicKeyToHex(miClavePublica);
+        Encriptador.guardarClavePublicaEnArchivo(this.nombre, miPubHex);
         System.out.println("Nodo " + nombre + " iniciado. Clave pública guardada en keys/" + nombre + ".pub");
     }
 
@@ -58,7 +57,7 @@ public class PCNodeB {
                         System.out.println("[DEBUG] Recibido crudo en " + nombre + ": " + linea);
 
                         if (linea.equals("GET_PUBKEY")) {
-                            out.println(Encriptador.publicKeyToBase64(miClavePublica));
+                            out.println(Encriptador.publicKeyToHex(miClavePublica));
                             continue;
                         }
 
@@ -89,17 +88,17 @@ public class PCNodeB {
 
             if (soyDestino) {
                 try {
-                    byte[] encAesKey = Base64.getDecoder().decode(mensaje.getEncAesKeyB64());
+                    byte[] encAesKey = Encriptador.hexToBytes(mensaje.getEncAesKeyHex());
                     byte[] aesKeyBytes = Encriptador.descifrarClaveAESConRSA(encAesKey, miClavePrivada);
 
-                    byte[] iv = Base64.getDecoder().decode(mensaje.getIvB64());
-                    byte[] cipher = Base64.getDecoder().decode(mensaje.getCiphertextB64());
+                    byte[] iv = Encriptador.hexToBytes(mensaje.getIvHex());
+                    byte[] cipher = Encriptador.hexToBytes(mensaje.getCiphertextHex());
 
                     PublicKey pubOrigen = clavesPublicas.get(mensaje.getOrigen());
                     if (pubOrigen == null) {
-                        String pubB64 = Encriptador.leerClavePublicaDesdeArchivoComoBase64(mensaje.getOrigen());
-                        if (pubB64 != null) {
-                            pubOrigen = Encriptador.publicKeyFromBase64(pubB64);
+                        String pubHex = Encriptador.leerClavePublicaDesdeArchivoComoHex(mensaje.getOrigen());
+                        if (pubHex != null) {
+                            pubOrigen = Encriptador.publicKeyFromHex(pubHex);
                             clavesPublicas.put(mensaje.getOrigen(), pubOrigen);
                             System.out.println("[OK] Clave pública cargada para " + mensaje.getOrigen());
                         }
@@ -108,7 +107,7 @@ public class PCNodeB {
                     boolean firmaValida = false;
                     if (pubOrigen != null) {
                         try {
-                            firmaValida = FirmaDigital.verificarFirma(cipher, mensaje.getSignatureB64(), pubOrigen);
+                            firmaValida = FirmaDigital.verificarFirma(cipher, mensaje.getSignatureHex(), pubOrigen);
                         } catch (Exception vf) {
                             System.err.println("[WARN] Error verificando firma: " + vf.getMessage());
                         }
@@ -194,14 +193,14 @@ public class PCNodeB {
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
             out.println("GET_PUBKEY");
-            String pubB64 = in.readLine();
-            if (pubB64 == null || pubB64.trim().isEmpty()) {
+            String pubHex = in.readLine();
+            if (pubHex == null || pubHex.trim().isEmpty()) {
                 System.err.println("[ERROR] Respuesta vacía al pedir clave pública a " + destino);
                 return false;
             }
 
-            Encriptador.guardarClavePublicaEnArchivo(destino, pubB64);
-            PublicKey pub = Encriptador.publicKeyFromBase64(pubB64);
+            Encriptador.guardarClavePublicaEnArchivo(destino, pubHex);
+            PublicKey pub = Encriptador.publicKeyFromHex(pubHex);
             clavesPublicas.put(destino, pub);
             System.out.println("[OK] Clave pública de " + destino + " obtenida y guardada.");
             return true;
@@ -228,13 +227,13 @@ public class PCNodeB {
             Encriptador.AesResultado ar = Encriptador.cifrarConAES(contenido.getBytes(StandardCharsets.UTF_8), aes);
 
             byte[] aesKeyCifrada = Encriptador.cifrarClaveAESConRSA(ar.clave, pubDestino);
-            String signatureB64 = FirmaDigital.firmar(ar.cipher, miClavePrivada);
+            String signatureHex = FirmaDigital.firmar(ar.cipher, miClavePrivada);
 
             Mensaje m = new Mensaje(nombre, destino,
-                    Base64.getEncoder().encodeToString(aesKeyCifrada),
-                    Base64.getEncoder().encodeToString(ar.iv),
-                    Base64.getEncoder().encodeToString(ar.cipher),
-                    signatureB64, nombre);
+                    Encriptador.bytesToHex(aesKeyCifrada),
+                    Encriptador.bytesToHex(ar.iv),
+                    Encriptador.bytesToHex(ar.cipher),
+                    signatureHex, nombre);
 
             // --- NUEVO: intentar enviar DIRECTO al destino primero ---
             try {
@@ -286,10 +285,10 @@ public class PCNodeB {
                 String[] partes = linea.split(" ");
                 String nodo = partes[0];
 
-                String pubB64 = Encriptador.leerClavePublicaDesdeArchivoComoBase64(nodo);
-                if (pubB64 != null) {
+                String pubHex = Encriptador.leerClavePublicaDesdeArchivoComoHex(nodo);
+                if (pubHex != null) {
                     try {
-                        PublicKey pub = Encriptador.publicKeyFromBase64(pubB64);
+                        PublicKey pub = Encriptador.publicKeyFromHex(pubHex);
                         clavesPublicas.put(nodo, pub);
                     } catch (Exception ignored) {}
                 } else {
