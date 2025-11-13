@@ -7,7 +7,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.Base64;
 
-public class PCNode {
+public class PCNodeB {
     private String ip;
     private int puerto;
     private List<String> vecinos;
@@ -21,7 +21,7 @@ public class PCNode {
 
     private static ConcurrentMap<String, PublicKey> clavesPublicas = new ConcurrentHashMap<>();
 
-    public PCNode(String ip, int puerto) throws Exception {
+    public PCNodeB (String ip, int puerto) throws Exception {
         this.ip = ip;
         this.puerto = puerto;
         this.vecinos = new ArrayList<>();

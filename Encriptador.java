@@ -1,54 +1,81 @@
 import javax.crypto.*;
-import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.spec.*;
+import java.io.*;
+import java.nio.file.*;
 import java.security.*;
+import java.security.spec.*;
 import java.util.Base64;
 
 public class Encriptador {
 
-    // Genera una clave AES aleatoria (para cifrar el mensaje *cifrado simetrico*)
+    public static class AesResultado {
+        public byte[] cipher;
+        public byte[] iv;
+        public SecretKey clave;
+    }
+
     public static SecretKey generarClaveAES() throws Exception {
-        KeyGenerator generador = KeyGenerator.getInstance("AES");
-        generador.init(128);
-        return generador.generateKey();
+        KeyGenerator kgen = KeyGenerator.getInstance("AES");
+        kgen.init(128);
+        return kgen.generateKey();
     }
 
-    // Cifra texto con AES
-    public static String cifrarAES(String texto, SecretKey clave) throws Exception {
-        Cipher cifrador = Cipher.getInstance("AES");
-        cifrador.init(Cipher.ENCRYPT_MODE, clave);
-        byte[] cifrado = cifrador.doFinal(texto.getBytes());
-        return Base64.getEncoder().encodeToString(cifrado);
+    public static AesResultado cifrarConAES(byte[] datos, SecretKey clave) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        byte[] iv = new byte[16];
+        new SecureRandom().nextBytes(iv);
+        cipher.init(Cipher.ENCRYPT_MODE, clave, new IvParameterSpec(iv));
+        AesResultado res = new AesResultado();
+        res.cipher = cipher.doFinal(datos);
+        res.iv = iv;
+        res.clave = clave;
+        return res;
     }
 
-    // Descifra texto con AES
-    public static String descifrarAES(String textoCifrado, SecretKey clave) throws Exception {
-        Cipher cifrador = Cipher.getInstance("AES");
-        cifrador.init(Cipher.DECRYPT_MODE, clave);
-        byte[] decodificado = Base64.getDecoder().decode(textoCifrado);
-        byte[] descifrado = cifrador.doFinal(decodificado);
-        return new String(descifrado);
+    public static byte[] descifrarConAES(byte[] datos, byte[] iv, byte[] claveBytes) throws Exception {
+        SecretKeySpec keySpec = new SecretKeySpec(claveBytes, "AES");
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, keySpec, new IvParameterSpec(iv));
+        return cipher.doFinal(datos);
     }
 
-    // Genera un par de claves RSA (pública/privada *cifrado asimetrico*)
-    public static KeyPair generarParRSA() throws Exception {
-        KeyPairGenerator generador = KeyPairGenerator.getInstance("RSA");
-        generador.initialize(2048);
-        return generador.generateKeyPair();
+    public static byte[] cifrarClaveAESConRSA(SecretKey claveAES, PublicKey pubRSA) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.ENCRYPT_MODE, pubRSA);
+        return cipher.doFinal(claveAES.getEncoded());
     }
 
-    // Cifra datos con RSA (normalmente usado para cifrar la clave AES)
-    public static String cifrarRSA(byte[] datos, PublicKey clavePublica) throws Exception {
-        Cipher cifrador = Cipher.getInstance("RSA");
-        cifrador.init(Cipher.ENCRYPT_MODE, clavePublica);
-        byte[] cifrado = cifrador.doFinal(datos);
-        return Base64.getEncoder().encodeToString(cifrado);
+    public static byte[] descifrarClaveAESConRSA(byte[] claveCifrada, PrivateKey privRSA) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, privRSA);
+        return cipher.doFinal(claveCifrada);
     }
 
-    // Descifra datos con RSA
-    public static byte[] descifrarRSA(String datosCifrados, PrivateKey clavePrivada) throws Exception {
-        Cipher cifrador = Cipher.getInstance("RSA");
-        cifrador.init(Cipher.DECRYPT_MODE, clavePrivada);
-        byte[] decodificado = Base64.getDecoder().decode(datosCifrados);
-        return cifrador.doFinal(decodificado);
+    public static String publicKeyToBase64(PublicKey clave) {
+        return Base64.getEncoder().encodeToString(clave.getEncoded());
+    }
+
+    public static PublicKey publicKeyFromBase64(String b64) throws Exception {
+        byte[] bytes = Base64.getDecoder().decode(b64);
+        X509EncodedKeySpec spec = new X509EncodedKeySpec(bytes);
+        return KeyFactory.getInstance("RSA").generatePublic(spec);
+    }
+
+    public static void guardarClavePublicaEnArchivo(String nombre, String pubB64) {
+        try {
+            Path dir = Paths.get("keys");
+            if (!Files.exists(dir)) Files.createDirectories(dir);
+            Files.writeString(dir.resolve(nombre + ".pub"), pubB64);
+        } catch (IOException e) {
+            System.err.println("Error guardando clave pública: " + e.getMessage());
+        }
+    }
+
+    public static String leerClavePublicaDesdeArchivoComoBase64(String nombre) {
+        try {
+            Path path = Paths.get("keys", nombre + ".pub");
+            if (Files.exists(path)) return Files.readString(path).trim();
+        } catch (IOException ignored) {}
+        return null;
     }
 }
